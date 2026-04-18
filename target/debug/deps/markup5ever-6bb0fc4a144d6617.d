@@ -1,0 +1,15 @@
+/home/gtombul/IdeaProjects/fiyat-arama/target/debug/deps/markup5ever-6bb0fc4a144d6617.d: /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/lib.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/data/mod.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/mod.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/tree_builder.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/serialize.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/buffer_queue.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/smallcharset.rs /home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/generated.rs /home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/named_entities.rs
+
+/home/gtombul/IdeaProjects/fiyat-arama/target/debug/deps/libmarkup5ever-6bb0fc4a144d6617.rmeta: /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/lib.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/data/mod.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/mod.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/tree_builder.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/serialize.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/buffer_queue.rs /home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/smallcharset.rs /home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/generated.rs /home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/named_entities.rs
+
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/lib.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/data/mod.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/mod.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/interface/tree_builder.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/serialize.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/buffer_queue.rs:
+/home/gtombul/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.12.1/util/smallcharset.rs:
+/home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/generated.rs:
+/home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out/named_entities.rs:
+
+# env-dep:OUT_DIR=/home/gtombul/IdeaProjects/fiyat-arama/target/debug/build/markup5ever-8f21ed2f6fd3c42c/out

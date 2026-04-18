@@ -2,9 +2,18 @@ use std::{collections::BTreeMap, error::Error};
 
 use clap::{Parser, Subcommand};
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, Table};
+use indicatif::{ProgressBar, ProgressStyle};
 use inquire::Select;
 use reqwest::Client;
-use rustyline::{error::ReadlineError, DefaultEditor};
+use rustyline::{
+    completion::{Completer, Pair},
+    error::ReadlineError,
+    highlight::Highlighter,
+    hint::Hinter,
+    history::DefaultHistory,
+    validate::Validator,
+    Context, Editor, Helper,
+};
 use scraper::{Html, Selector};
 use serde_json::Value;
 use url::Url;
@@ -38,6 +47,20 @@ enum Commands {
 }
 
 #[derive(Debug, Clone)]
+struct SehirBilgi {
+    ad: String,
+    slug: String,
+}
+
+#[derive(Debug, Clone)]
+struct BenzinFiyati {
+    dagitici: String,
+    benzin: String,
+    motorin: String,
+    lpg: String,
+}
+
+#[derive(Debug, Clone)]
 struct MetaInspection {
     url: String,
     title: Option<String>,
@@ -63,6 +86,69 @@ struct ArticleInfo {
     date_published: Option<String>,
 }
 
+// ── REPL Tab Tamamlama ───────────────────────────────────────────────────────
+
+struct FiyatCompleter {
+    commands: Vec<String>,
+}
+
+impl Completer for FiyatCompleter {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let word_start = line[..pos].rfind(' ').map(|i| i + 1).unwrap_or(0);
+        let word = &line[word_start..pos];
+
+        let matches: Vec<Pair> = self
+            .commands
+            .iter()
+            .filter(|cmd| cmd.starts_with(word))
+            .map(|cmd| Pair {
+                display: cmd.clone(),
+                replacement: cmd.clone(),
+            })
+            .collect();
+
+        Ok((word_start, matches))
+    }
+}
+
+impl Hinter for FiyatCompleter {
+    type Hint = String;
+}
+impl Highlighter for FiyatCompleter {}
+impl Validator for FiyatCompleter {}
+impl Helper for FiyatCompleter {}
+
+// ── Yardımcılar ─────────────────────────────────────────────────────────────
+
+fn yeni_spinner(mesaj: &str) -> ProgressBar {
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
+            .template("{spinner:.cyan} {msg}")
+            .unwrap(),
+    );
+    pb.set_message(mesaj.to_string());
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb
+}
+
+fn bolum_basligi(baslik: &str) {
+    let cizgi = "─".repeat(baslik.len() + 4);
+    println!("\n┌{cizgi}┐");
+    println!("│  {baslik}  │");
+    println!("└{cizgi}┘");
+}
+
+// ── Ana Giriş ───────────────────────────────────────────────────────────────
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -78,6 +164,8 @@ async fn main() {
         eprintln!("Hata: {err}");
     }
 }
+
+// ── Menü ────────────────────────────────────────────────────────────────────
 
 async fn run_interactive_menu() -> Result<(), Box<dyn Error>> {
     loop {
@@ -97,11 +185,9 @@ async fn run_interactive_menu() -> Result<(), Box<dyn Error>> {
             Ok("0. Yardım") => execute_command(Commands::Help).await?,
             Ok("1. Döviz Kurları") => execute_command(Commands::Doviz).await?,
             Ok("2. Benzin Fiyatları") => {
-                let sehir = inquire::Text::new("Şehir (opsiyonel):").prompt().ok();
-                let ilce = inquire::Text::new("İlçe (opsiyonel):").prompt().ok();
                 execute_command(Commands::Benzin {
-                    sehir: sehir.filter(|s| !s.trim().is_empty()),
-                    ilce: ilce.filter(|s| !s.trim().is_empty()),
+                    sehir: None,
+                    ilce: None,
                     sirala: true,
                 })
                 .await?;
@@ -126,27 +212,44 @@ async fn run_interactive_menu() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// ── REPL ────────────────────────────────────────────────────────────────────
+
 async fn run_repl() -> Result<(), Box<dyn Error>> {
-    let mut rl = DefaultEditor::new()?;
+    let helper = FiyatCompleter {
+        commands: vec![
+            "help".to_string(),
+            "doviz".to_string(),
+            "benzin".to_string(),
+            "ara".to_string(),
+            "incele".to_string(),
+            "exit".to_string(),
+            "quit".to_string(),
+        ],
+    };
+
+    let mut rl: Editor<FiyatCompleter, DefaultHistory> = Editor::new()?;
+    rl.set_helper(Some(helper));
+
     println!("REPL moduna hoş geldiniz. Çıkmak için 'exit' yazın.");
+    println!("  Tab  → komut tamamlama   |   ↑↓  → geçmiş");
 
     loop {
         let line = rl.readline("fiyat-arama> ");
 
         match line {
             Ok(input) => {
-                let input = input.trim();
+                let input = input.trim().to_string();
                 if input.is_empty() {
                     continue;
                 }
 
-                rl.add_history_entry(input)?;
+                rl.add_history_entry(&input)?;
 
-                if matches!(input, "exit" | "quit") {
+                if matches!(input.as_str(), "exit" | "quit") {
                     break;
                 }
 
-                let args = match shlex::split(input) {
+                let args = match shlex::split(&input) {
                     Some(a) => a,
                     None => {
                         eprintln!("Komut ayrıştırılamadı.");
@@ -179,50 +282,79 @@ async fn run_repl() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// ── Komut İşleyici ──────────────────────────────────────────────────────────
+
 async fn execute_command(command: Commands) -> Result<(), Box<dyn Error>> {
     match command {
         Commands::Help => print_help_message(),
+
         Commands::Doviz => {
-            println!("Döviz scraping demo çıktısı:");
+            bolum_basligi("Döviz Kurları (demo)");
             let mut table = Table::new();
             table
                 .load_preset(UTF8_FULL)
                 .apply_modifier(UTF8_ROUND_CORNERS)
-                .set_header(vec!["Birim", "Alış", "Satış"]);
-
+                .set_header(vec![
+                    Cell::new("Birim").fg(Color::Cyan),
+                    Cell::new("Alış").fg(Color::Cyan),
+                    Cell::new("Satış").fg(Color::Cyan),
+                ]);
             table.add_row(vec![
                 Cell::new("USD/TRY").fg(Color::Green),
                 Cell::new("38.42"),
                 Cell::new("38.47"),
             ]);
             table.add_row(vec![
-                Cell::new("EUR/TRY").fg(Color::Cyan),
+                Cell::new("EUR/TRY").fg(Color::Blue),
                 Cell::new("43.60"),
                 Cell::new("43.68"),
             ]);
+            table.add_row(vec![
+                Cell::new("GBP/TRY").fg(Color::Magenta),
+                Cell::new("50.10"),
+                Cell::new("50.20"),
+            ]);
             println!("{table}");
         }
+
         Commands::Benzin {
             sehir,
-            ilce,
-            sirala,
+            ilce: _,
+            sirala: _,
         } => {
-            println!(
-                "Benzin scraping demo -> şehir: {:?}, ilçe: {:?}, sırala: {}",
-                sehir, ilce, sirala
-            );
+            let client = Client::builder().user_agent("fiyat-arama/0.1").build()?;
+
+            let sehir_slug = if let Some(s) = sehir {
+                s
+            } else {
+                benzin_konum_sec(&client).await?
+            };
+
+            let pb = yeni_spinner(&format!("Fiyatlar alınıyor: {}...", sehir_slug));
+            let fiyatlar = fetch_benzin_fiyatlari(&client, &sehir_slug).await?;
+            pb.finish_and_clear();
+
+            if fiyatlar.is_empty() {
+                println!("Bu konum için fiyat verisi bulunamadı.");
+            } else {
+                render_benzin_tablosu(&fiyatlar, &sehir_slug);
+            }
         }
+
         Commands::Ara { urun_adi } => {
             let query = urun_adi.join(" ");
             if query.trim().is_empty() {
                 eprintln!("Kullanım: ara [urun_adi]");
                 return Ok(());
             }
-            println!("Genel arama demo -> {query}");
-            println!("(Bu bölümde gerçek entegrasyonda fiyatlar ucuzdan pahalıya sıralanmalıdır.)");
+            bolum_basligi(&format!("Ürün Arama: {query}"));
+            println!("(Gerçek entegrasyonda fiyatlar ucuzdan pahalıya sıralanacak.)");
         }
+
         Commands::Incele { url } => {
+            let pb = yeni_spinner("Site inceleniyor...");
             let inspection = inspect_url(&url).await?;
+            pb.finish_and_clear();
             render_inspection(&inspection);
         }
     }
@@ -230,16 +362,138 @@ async fn execute_command(command: Commands) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// ── Benzin: Konum Seçimi ────────────────────────────────────────────────────
+
+async fn benzin_konum_sec(client: &Client) -> Result<String, Box<dyn Error>> {
+    let pb = yeni_spinner("Şehirler doviz.com'dan yükleniyor...");
+    let sehirler = fetch_benzin_sehirler(client).await?;
+    pb.finish_and_clear();
+
+    if sehirler.is_empty() {
+        return Err("Şehir listesi alınamadı.".into());
+    }
+
+    let sehir_adlari: Vec<String> = sehirler.iter().map(|s| s.ad.clone()).collect();
+    let secilen_ad = Select::new("Şehir seçin:", sehir_adlari)
+        .with_help_message("Filtrelemek için yazmaya başlayın, ↑↓ ile seçin, Enter ile onayla")
+        .prompt()?;
+
+    let sehir_slug = sehirler
+        .iter()
+        .find(|s| s.ad == secilen_ad)
+        .map(|s| s.slug.clone())
+        .unwrap_or_default();
+
+    Ok(sehir_slug)
+}
+
+// ── Benzin: Scraping ────────────────────────────────────────────────────────
+
+async fn fetch_benzin_sehirler(client: &Client) -> Result<Vec<SehirBilgi>, Box<dyn Error>> {
+    let html = client
+        .get("https://www.doviz.com/akaryakit-fiyatlari")
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let doc = Html::parse_document(&html);
+    let link_sel = Selector::parse("a[href]").unwrap();
+
+    let mut sehirler: Vec<SehirBilgi> = Vec::new();
+    let mut gorulenler = std::collections::HashSet::new();
+    let prefix = "https://www.doviz.com/akaryakit-fiyatlari/";
+
+    for el in doc.select(&link_sel) {
+        let href = el.value().attr("href").unwrap_or("");
+        if !href.starts_with(prefix) {
+            continue;
+        }
+        let slug = href[prefix.len()..].trim_matches('/').to_string();
+        if slug.is_empty() || slug.contains('/') || !gorulenler.insert(slug.clone()) {
+            continue;
+        }
+        let ad = el.text().collect::<String>().trim().to_string();
+        if !ad.is_empty() && ad.len() < 60 {
+            sehirler.push(SehirBilgi { ad, slug });
+        }
+    }
+
+    Ok(sehirler)
+}
+
+
+async fn fetch_benzin_fiyatlari(
+    client: &Client,
+    sehir_slug: &str,
+) -> Result<Vec<BenzinFiyati>, Box<dyn Error>> {
+    let url = format!("https://www.doviz.com/akaryakit-fiyatlari/{}", sehir_slug);
+    let html = client.get(&url).send().await?.text().await?;
+    let doc = Html::parse_document(&html);
+
+    let mut fiyatlar: Vec<BenzinFiyati> = Vec::new();
+    let row_sel = Selector::parse("table tbody tr").unwrap();
+    let td_sel = Selector::parse("td").unwrap();
+
+    for row in doc.select(&row_sel) {
+        let cells: Vec<String> = row
+            .select(&td_sel)
+            .map(|td| td.text().collect::<String>().trim().to_string())
+            .collect();
+
+        if cells.len() >= 4 {
+            fiyatlar.push(BenzinFiyati {
+                dagitici: cells[0].clone(),
+                benzin: cells[1].clone(),
+                motorin: cells[2].clone(),
+                lpg: cells[3].clone(),
+            });
+        }
+    }
+
+    Ok(fiyatlar)
+}
+
+fn render_benzin_tablosu(fiyatlar: &[BenzinFiyati], konum: &str) {
+    bolum_basligi(&format!("Benzin Fiyatları — {konum}"));
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![
+            Cell::new("Dağıtıcı").fg(Color::Cyan),
+            Cell::new("Benzin (₺)").fg(Color::Cyan),
+            Cell::new("Motorin (₺)").fg(Color::Cyan),
+            Cell::new("LPG (₺)").fg(Color::Cyan),
+        ]);
+
+    for fiyat in fiyatlar {
+        table.add_row(vec![
+            Cell::new(&fiyat.dagitici),
+            Cell::new(&fiyat.benzin).fg(Color::Green),
+            Cell::new(&fiyat.motorin).fg(Color::Yellow),
+            Cell::new(&fiyat.lpg).fg(Color::Magenta),
+        ]);
+    }
+
+    println!("{table}");
+}
+
+// ── Yardım ──────────────────────────────────────────────────────────────────
+
 fn print_help_message() {
-    println!("fiyat-arama komutları:");
+    bolum_basligi("fiyat-arama Komutları");
     println!("  fiyat-arama help");
     println!("  fiyat-arama doviz");
     println!("  fiyat-arama benzin [SEHIR] [ILCE] [--sirala]");
     println!("  fiyat-arama ara <URUN_ADI...>");
     println!("  fiyat-arama incele <URL>");
     println!();
-    println!("Not: Standart clap yardımı için `fiyat-arama --help` komutunu da kullanabilirsiniz.");
+    println!("İpucu: Standart yardım için `fiyat-arama --help` de çalışır.");
 }
+
+// ── Site İnceleme ────────────────────────────────────────────────────────────
 
 async fn inspect_url(raw_url: &str) -> Result<MetaInspection, Box<dyn Error>> {
     let validated_url = Url::parse(raw_url)?;
@@ -419,13 +673,29 @@ fn shorten_schema_url(value: &str) -> String {
 }
 
 fn render_inspection(inspection: &MetaInspection) {
-    println!("\n=== Site İnceleme Raporu ===");
-    println!("URL: {}", inspection.url);
-    println!("Başlık: {}", inspection.title.as_deref().unwrap_or("-"));
-    println!(
-        "Açıklama: {}",
-        inspection.description.as_deref().unwrap_or("-")
-    );
+    bolum_basligi("Site İnceleme Raporu");
+
+    let mut info_table = Table::new();
+    info_table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![
+            Cell::new("Alan").fg(Color::Cyan),
+            Cell::new("Değer").fg(Color::Cyan),
+        ]);
+    info_table.add_row(vec![
+        Cell::new("URL").fg(Color::Blue),
+        Cell::new(&inspection.url),
+    ]);
+    info_table.add_row(vec![
+        Cell::new("Başlık").fg(Color::Blue),
+        Cell::new(inspection.title.as_deref().unwrap_or("—")),
+    ]);
+    info_table.add_row(vec![
+        Cell::new("Açıklama").fg(Color::Blue),
+        Cell::new(inspection.description.as_deref().unwrap_or("—")),
+    ]);
+    println!("{info_table}");
 
     if !inspection.open_graph.is_empty() {
         println!("\nOpenGraph Etiketleri:");
@@ -433,7 +703,10 @@ fn render_inspection(inspection: &MetaInspection) {
         og_table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec!["Etiket", "Değer"]);
+            .set_header(vec![
+                Cell::new("Etiket").fg(Color::Cyan),
+                Cell::new("Değer").fg(Color::Cyan),
+            ]);
 
         for (k, v) in &inspection.open_graph {
             og_table.add_row(vec![Cell::new(k).fg(Color::Blue), Cell::new(v)]);
@@ -447,49 +720,53 @@ fn render_inspection(inspection: &MetaInspection) {
     );
 
     if let Some(product) = &inspection.detected_product {
-        println!("\nTespit: Product");
+        println!("\nTespit: Ürün (Product)");
         let mut p_table = Table::new();
         p_table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec!["Alan", "Değer"]);
-
+            .set_header(vec![
+                Cell::new("Alan").fg(Color::Cyan),
+                Cell::new("Değer").fg(Color::Cyan),
+            ]);
         p_table.add_row(vec![
-            Cell::new("Name").fg(Color::Green),
+            Cell::new("İsim").fg(Color::Green),
             Cell::new(&product.name),
         ]);
         p_table.add_row(vec![
-            Cell::new("Price"),
-            Cell::new(product.price.as_deref().unwrap_or("-")),
+            Cell::new("Fiyat"),
+            Cell::new(product.price.as_deref().unwrap_or("—")),
         ]);
         p_table.add_row(vec![
-            Cell::new("Currency"),
-            Cell::new(product.currency.as_deref().unwrap_or("-")),
+            Cell::new("Para Birimi"),
+            Cell::new(product.currency.as_deref().unwrap_or("—")),
         ]);
         p_table.add_row(vec![
-            Cell::new("Availability"),
-            Cell::new(product.availability.as_deref().unwrap_or("-")),
+            Cell::new("Stok Durumu"),
+            Cell::new(product.availability.as_deref().unwrap_or("—")),
         ]);
         println!("{p_table}");
     } else if let Some(article) = &inspection.detected_article {
-        println!("\nTespit: Article");
+        println!("\nTespit: Makale (Article)");
         let mut a_table = Table::new();
         a_table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_header(vec!["Alan", "Değer"]);
-
+            .set_header(vec![
+                Cell::new("Alan").fg(Color::Cyan),
+                Cell::new("Değer").fg(Color::Cyan),
+            ]);
         a_table.add_row(vec![
-            Cell::new("Headline").fg(Color::Yellow),
-            Cell::new(article.headline.as_deref().unwrap_or("-")),
+            Cell::new("Başlık").fg(Color::Yellow),
+            Cell::new(article.headline.as_deref().unwrap_or("—")),
         ]);
         a_table.add_row(vec![
-            Cell::new("Author"),
-            Cell::new(article.author.as_deref().unwrap_or("-")),
+            Cell::new("Yazar"),
+            Cell::new(article.author.as_deref().unwrap_or("—")),
         ]);
         a_table.add_row(vec![
-            Cell::new("DatePublished"),
-            Cell::new(article.date_published.as_deref().unwrap_or("-")),
+            Cell::new("Yayın Tarihi"),
+            Cell::new(article.date_published.as_deref().unwrap_or("—")),
         ]);
         println!("{a_table}");
     } else {

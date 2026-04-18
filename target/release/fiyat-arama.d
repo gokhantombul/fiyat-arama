@@ -1,1 +1,1 @@
-/Users/gtombul/IdeaProjects/fiyat-arama/target/release/fiyat-arama: /Users/gtombul/IdeaProjects/fiyat-arama/src/main.rs
+/home/gtombul/IdeaProjects/fiyat-arama/target/release/fiyat-arama: /home/gtombul/IdeaProjects/fiyat-arama/src/main.rs

@@ -12,6 +12,7 @@ use url::Url;
 #[derive(Parser, Debug)]
 #[command(name = "fiyat-arama")]
 #[command(about = "Finansal veri takipçisi, ürün arama ve site inceleme aracı", long_about = None)]
+#[command(disable_help_subcommand = true)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,

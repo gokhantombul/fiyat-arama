@@ -19,6 +19,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Komut kullanım yardımını göster
+    Help,
     /// Döviz kurlarını getir
     Doviz,
     /// Benzin fiyatlarını getir
@@ -79,6 +81,7 @@ async fn main() {
 async fn run_interactive_menu() -> Result<(), Box<dyn Error>> {
     loop {
         let menu_items = vec![
+            "0. Yardım",
             "1. Döviz Kurları",
             "2. Benzin Fiyatları",
             "3. Ürün Ara",
@@ -90,6 +93,7 @@ async fn run_interactive_menu() -> Result<(), Box<dyn Error>> {
         let selection = Select::new("Ne yapmak istersiniz?", menu_items.clone()).prompt();
 
         match selection {
+            Ok("0. Yardım") => execute_command(Commands::Help).await?,
             Ok("1. Döviz Kurları") => execute_command(Commands::Doviz).await?,
             Ok("2. Benzin Fiyatları") => {
                 let sehir = inquire::Text::new("Şehir (opsiyonel):").prompt().ok();
@@ -176,6 +180,7 @@ async fn run_repl() -> Result<(), Box<dyn Error>> {
 
 async fn execute_command(command: Commands) -> Result<(), Box<dyn Error>> {
     match command {
+        Commands::Help => print_help_message(),
         Commands::Doviz => {
             println!("Döviz scraping demo çıktısı:");
             let mut table = Table::new();
@@ -222,6 +227,17 @@ async fn execute_command(command: Commands) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn print_help_message() {
+    println!("fiyat-arama komutları:");
+    println!("  fiyat-arama help");
+    println!("  fiyat-arama doviz");
+    println!("  fiyat-arama benzin [SEHIR] [ILCE] [--sirala]");
+    println!("  fiyat-arama ara <URUN_ADI...>");
+    println!("  fiyat-arama incele <URL>");
+    println!();
+    println!("Not: Standart clap yardımı için `fiyat-arama --help` komutunu da kullanabilirsiniz.");
 }
 
 async fn inspect_url(raw_url: &str) -> Result<MetaInspection, Box<dyn Error>> {
